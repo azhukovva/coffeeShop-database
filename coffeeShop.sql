@@ -4,15 +4,21 @@
 -- Aryna Zhukava        xzhuka01
 
 ---- DROPs ----
-DROP TABLE Cupping_akce;
-DROP TABLE Kavarna;
-DROP TABLE Kavova_Zrna;
-DROP TABLE Kava;
-DROP TABLE Komentar;
-DROP TABLE Zamestnanec;
-DROP TABLE Recenze;
-DROP TABLE Zakaznik;
-DROP TABLE Uzivatel;
+-- DROP TABLE Cupping_akce;
+-- DROP TABLE Kavarna;
+-- DROP TABLE Kavova_Zrna;
+-- DROP TABLE Kava;
+-- DROP TABLE Komentar;
+-- DROP TABLE Zamestnanec;
+-- DROP TABLE Recenze;
+-- DROP TABLE Zakaznik;
+-- DROP TABLE Uzivatel;
+-- DROP MATERIALIZED VIEW prehled_kavaren_podle_casu_otevreni;
+-- DROP INDEX zakaznik_kavarna_index;
+-- DROP PROCEDURE more_than_one_cup;
+-- DROP TRIGGER delete_after_not_exist;
+-- DROP TRIGGER prevent_delete_review;
+
 
 ----CREATE TABLES----
 
@@ -198,12 +204,13 @@ WHERE U.User_ID IN (
     BEFORE DELETE ON Recenze
     FOR EACH ROW
     BEGIN
-    IF (:OLD.Pocet_Hvezdicek >= 4) THEN
+    IF (:OLD.Pocet_Hvezdicek > 4) THEN
         RAISE_APPLICATION_ERROR(-20002, 'Vysoce hodnocené recenze nelze smazat!');
     END IF;
     END;
 -- trigger check
-    DELETE FROM Recenze WHERE Pocet_Hvezdicek > 4;
+    --DELETE FROM Recenze WHERE Pocet_Hvezdicek > 4;
+-- checked - works ;)
 
 
 -------- PROCEDURES --------
@@ -236,11 +243,34 @@ WHERE U.User_ID IN (
     END;
 
 
--------- INDEX A EXPLAIN PLAN --------
+-------- INDEX A EXPLAIN PLAN + aggregate function--------
+-- the average number of coffees per day for each coffeeshop
+-- based on regular customers
+EXPLAIN PLAN FOR
+SELECT K.Kavarna_ID, K.Adresa, AVG(Z.Pocet_kav_denne) AS prumerny_pocet_kav_denne
+FROM Kavarna K
+JOIN Zakaznik Z ON K.Kavarna_ID = Z.Oblibena_Kavarna
+GROUP BY K.Kavarna_ID, K.Adresa;
 
+-- Vytvorení indexu na sloupec Oblibena_Kavarna v tabulce Zakaznik
+CREATE INDEX zakaznik_kavarna_index ON Zakaznik (Oblibena_Kavarna);
 
+-- Opakujeme pro kontrolu provedeneho indexu
+EXPLAIN PLAN FOR
+SELECT K.Kavarna_ID, K.Adresa, AVG(Z.Pocet_kav_denne) AS prumerny_pocet_kav_denne
+FROM Kavarna K
+JOIN Zakaznik Z ON K.Kavarna_ID = Z.Oblibena_Kavarna
+GROUP BY K.Kavarna_ID, K.Adresa;
 
+-- Zobrazeni planu provedeni
+SELECT * FROM TABLE(DBMS_XPLAN.display);
 
+-------- MATERIALIZOVANY POHLED --------
+CREATE MATERIALIZED VIEW prehled_kavaren_podle_casu_otevreni
+BUILD IMMEDIATE
+REFRESH COMPLETE
+AS
+SELECT * FROM Kavarna ORDER BY Cas_otevreni ASC;
 
 -------- PRISTUPOVE PRAVA PRO xdvory00 --------
 GRANT ALL ON Cupping_akce TO xdvory00;
@@ -252,5 +282,7 @@ GRANT ALL ON Recenze TO xdvory00;
 GRANT ALL ON Uzivatel TO xdvory00;
 GRANT ALL ON Zakaznik TO xdvory00;
 GRANT ALL ON Zamestnanec TO xdvory00;
+
+
 
 
